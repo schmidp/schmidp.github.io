@@ -1,4 +1,5 @@
-schmidp.github.io
-=================
+www.schmidp.com
+===============
 
-Blog
+Blog of Philipp Schmid
+

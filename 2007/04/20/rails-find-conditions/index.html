@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - Rails find :conditions</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">Rails find :conditions</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          20 Apr 2007
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          379 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>The Rails application I’m currently working on accepts URLs like:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">GET /submarks
+GET /submarks?lat<span class="o">=</span>:latitude&amp;amp<span class="p">;</span><span class="nv">lng</span><span class="o">=</span>:longitude
+GET /submarks?lat<span class="o">=</span>:latitude&amp;amp<span class="p">;</span><span class="nv">lng</span><span class="o">=</span>:longitude&amp;amp<span class="p">;</span><span class="nv">user</span><span class="o">=</span>:user_id
+GET /submarks?lat<span class="o">=</span>:latitude&amp;amp<span class="p">;</span><span class="nv">lng</span><span class="o">=</span>:longitude&amp;amp<span class="p">;</span><span class="nv">channel</span><span class="o">=</span>:channel_id
+GET /submarks?lat<span class="o">=</span>:latitude&amp;amp<span class="p">;</span><span class="nv">lng</span><span class="o">=</span>:longitude&amp;amp<span class="p">;</span><span class="nv">channel</span><span class="o">=</span>:channel_id&amp;amp<span class="p">;</span><span class="nv">user</span><span class="o">=</span>:user_id</code></pre></figure>
+
+<p>All query parameters are optional; only lat and lng have to appear together.
+On the Rails end, I have a Submark model with the attributes lat, lng, user_id and channel_id.</p>
+
+<p>So how do you implement find call on the Submark model without a long, ugly if-elsif-else statement?
+First of all, if you only have = as a comparator you can use a hash for the :conditions parameter of the find method:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="n">conditions</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">conditions</span><span class="p">[</span><span class="ss">:user_id</span><span class="p">]</span> <span class="o">=&gt;</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]</span> <span class="k">if</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]</span>
+<span class="n">conditions</span><span class="p">[</span><span class="ss">:channel_id</span><span class="p">]</span> <span class="o">=&gt;</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]</span> <span class="k">if</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]</span>
+<span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">,</span> <span class="ss">:conditions</span> <span class="o">=&gt;</span> <span class="n">conditions</span><span class="p">)</span></code></pre></figure>
+
+<p>But what if you want OR instead of AND in the WHERE clause? Or what if you want to do something like lat &lt; 16?
+Currently, you have revert to ugly if-elsif-else statements like:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="k">if</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]</span> <span class="n">and</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">].</span><span class="nf">nil?</span>
+  <span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">,</span> <span class="ss">:conditions</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="s2">"user_id = ?"</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]])</span>
+<span class="k">elsif</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">].</span><span class="nf">nil?</span> <span class="n">and</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]</span>
+  <span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">,</span> <span class="ss">:conditions</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="s2">"user_id = ?"</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]])</span>
+<span class="k">elsif</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]</span> <span class="n">and</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]</span>
+  <span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">,</span> <span class="ss">:conditions</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="s2">"user_id = ? AND channel_id = ?"</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]])</span>
+<span class="k">else</span>
+  <span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">)</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>A good solution for this problem is the <a href="http://opensvn.csie.org/ezra/rails/plugins/dev/ez_where/">ez_where</a> plugin by Ezra Zygmuntowicz and Fabien Franzen.
+It includes a new find_where method in your ActiveRecord models which takes a code block building the conditions with a quite nifty syntax.</p>
+
+<p>But I didn’t want to depend on an external plugin, mainly because, as we’re working with edge Rails, it’s not unlikely that ez_where will break sometime during development.</p>
+
+<p>Instead, I’ve implemented a little helper, create_conditions, which is able to construct a conditions array in the format the usual find method likes. It also works by utilizing a code block. You get a Conditions class as parameter to your code block, which has the methods AND and OR.</p>
+
+<p>This is how you would use create_conditions in your controller:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="n">conditions</span> <span class="o">=</span> <span class="n">create_conditions</span> <span class="k">do</span> <span class="o">|</span> <span class="n">c</span> <span class="o">|</span>
+  <span class="n">c</span><span class="p">.</span><span class="nf">and</span> <span class="p">[</span><span class="s2">"channel_id = ?"</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]]</span> <span class="k">if</span> <span class="n">params</span><span class="p">[</span><span class="ss">:channel</span><span class="p">]</span>
+  <span class="n">c</span><span class="p">.</span><span class="nf">and</span> <span class="p">[</span><span class="s2">"user_id = ?"</span><span class="p">,</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]]</span> <span class="k">if</span> <span class="n">params</span><span class="p">[</span><span class="ss">:user</span><span class="p">]</span>
+  <span class="n">c</span><span class="p">.</span><span class="nf">or</span> <span class="s2">"distance &lt; 10"</span>
+<span class="k">end</span>
+<span class="no">Submark</span><span class="p">.</span><span class="nf">find</span><span class="p">(</span><span class="ss">:all</span><span class="p">,</span> <span class="ss">:conditions</span> <span class="o">=&gt;</span> <span class="n">conditions</span><span class="p">)</span></code></pre></figure>
+
+<p>The result of create_conditions looks like:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby">  <span class="p">[</span><span class="s2">"channel_id = ? AND user_id = ? OR distance &lt; 10"</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">42</span><span class="p">]</span></code></pre></figure>
+
+<p>As you can see, you can use both String- and Array-based conditions. Hash-based conditions are not supported.</p>
+
+<p><a href="http://www.schmidp.com/public/code/rails/conditions_helper.rb">Get the code here.</a></p>
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

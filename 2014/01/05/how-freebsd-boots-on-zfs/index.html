@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - How FreeBSD Boots on ZFS</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">How FreeBSD Boots on ZFS</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          05 Jan 2014
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          729 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <h1 id="uefi">UEFI</h1>
+
+<p>Because FreeBSD UEFI support is not <em><a href="FreeBSDUEFI">yet</a></em> finished, the following will only describe how FreeBSD boots on a BIOS-based machine.<br />
+For more information on UEFI booting on FreeBSD look <a href="https://wiki.freebsd.org/UEFI">here</a>, and for information on UEFI in general <a href="http://wiki.osdev.org/UEFI">here</a>.</p>
+
+<h1 id="bios-based-system">BIOS-Based System</h1>
+
+<p>On a BIOS-based system, the BIOS tries to find the MBR in the first 512 bytes of the installed hard disks.
+On the first hard disk where it finds an MBR it will start to execute the MBR’s boot code. The BIOS usually identifies the MBR by a special boot signature at the end of the MBR. More about that <a href="http://en.wikipedia.org/wiki/Master_boot_record">on Wikipedia</a>.</p>
+
+<p>The different MBRs available in FreeBSD are:</p>
+
+<ul>
+  <li><a href="http://svnweb.freebsd.org/base/releng/10.0/sys/boot/i386/boot0/boot0.S?revision=259065&amp;view=markup">/boot/boot0</a>: MBR with boot menu</li>
+  <li><a href="http://svnweb.freebsd.org/base/releng/10.0/sys/boot/i386/mbr/mbr.s?view=markup">/boot/mbr</a>: MBR that just boots the active partition</li>
+  <li><a href="http://svnweb.freebsd.org/base/releng/10.0/sys/boot/i386/pmbr/pmbr.s?view=markup">/boot/pmbr</a>: a protective MBR that’s part of a GPT-based disk layout. It’s the one we’re going to use here.</li>
+</ul>
+
+<p>So what are the steps for getting the kernel into memory?<br />
+On a plain MBR x86 system, the boot chain ususually looks like this:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>BIOS -&gt; MBR (stage1) -&gt; VBR (stage2) -&gt; Boot Loader (stage3) on filesystem -&gt; FreeBSD Kernel on filesystem
+
+MBR = Master Boot Record = stage 1
+VBR = Volume Boot Record = stage 2
+The 3rd-stage boot loader is the one with the ASCII art splash screen.
+</code></pre></div></div>
+
+<p>And specifically in a non-ZFS FreeBSD system:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>BIOS -&gt; /boot/boot0 -&gt; /boot/boot2 -&gt; /boot/loader -&gt; FreeBSD Kernel
+</code></pre></div></div>
+
+<p>The MBR - <code class="highlighter-rouge">/boot/boot0</code> - is stored in the first block of the hard disk and the VBR - <code class="highlighter-rouge">/boot/boot2</code> - in the first block of the partition.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>|MBR     | Partition 1                       | Partition 2                       |
+|MBR     | VBR | Filesystem of Partition 1   | VBR | Filesystem of Partition 2   |
+|1 block | 1 b.|                             | 1 b.|                             |
+</code></pre></div></div>
+
+<p>I just want to note that when I say <code class="highlighter-rouge">/boot/boot0</code>, I’m referring to the copy of the MBR or VBR that you can find in <code class="highlighter-rouge">/boot</code>.<br />
+What I mean by this is that the file in <code class="highlighter-rouge">/boot</code> is not the actual MBR, but during installation of the OS, the installer copies the file <code class="highlighter-rouge">/boot/boot0</code> into the first block of the hard disk.</p>
+
+<h3 id="gpt">GPT</h3>
+
+<p>Since an MBR-based partitioning scheme can only address drives smaller than 2TB a replacement was needed. That replacement is <a href="http://en.wikipedia.org/wiki/GUID_Partition_Table">GPT</a> (GUID Partition Table).</p>
+
+<p>But BIOS-based systems still need an MBR. Thus, part of a GPT setup is the PMBR or protective MBR, which contains the boot code to load the 2nd boot loader stage, as well as a partition table that contains only one entry spanning the whole disk. That’s how the protective MBR got its name, because a non-GPT-aware OS will think <em>there is a partition spanning the whole drive and I shouldn’t mess with it</em>.</p>
+
+<p>So for a GPT partition scheme the boot chain looks like:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>BIOS -&gt; /boot/pmbr -&gt; /boot/gptboot -&gt; /boot/loader -&gt; FreeBSD Kernel
+</code></pre></div></div>
+
+<p>And the disk layout:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>|PMBR    | GPT Header | Partition 1 of type freebsd-boot | Partition 2 | Partition n... |
+|1 block | 33 blocks  | /boot/gptboot                    | filesystem  | filesystem     |
+</code></pre></div></div>
+
+<p>The BIOS loads the protective MBR, which looks at GPT header / partition table, finds the first FreeBSD boot partition, and starts executing the 2nd-stage boot loader (which is stored in the beginning of the partition): <a href="http://svnweb.freebsd.org/base/releng/10.0/sys/boot/i386/gptboot/gptboot.c?view=markup">/boot/gptboot</a> or with ZFS <a href="http://svnweb.freebsd.org/base/releng/10.0/sys/boot/i386/zfsboot/zfsboot.c?view=markup">/boot/gptzfsboot</a>.</p>
+
+<p>The 2nd-stage boot loader tries to load the 3rd stage, which is <code class="highlighter-rouge">/boot/loader</code> in the case of FreeBSD.<br />
+I haven’t checked the other 2nd-stage boot loaders, but <code class="highlighter-rouge">/boot/gptboot</code> at least tries to load a kernel directly at <code class="highlighter-rouge">/boot/kernel/kernel</code> if it cannot find the 3rd-stage boot loader.</p>
+
+<h3 id="zfs">ZFS</h3>
+
+<p>With a ZFS-based system the 3rd stage would be <code class="highlighter-rouge">/boot/zfsloader</code> and the chain looks like:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>BIOS -&gt; /boot/pmbr -&gt; /boot/gptzfsboot -&gt; /boot/zfsloader -&gt; FreeBSD Kernel
+</code></pre></div></div>
+
+<p>Both <code class="highlighter-rouge">/boot/gptzfsboot</code> and <code class="highlighter-rouge">/boot/zfsloader</code> are already able to read ZFS partitions and locate files necessary for booting.</p>
+
+<p>After installing the boot stages to disk the disk would look like:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>|MBR     | GPT Header | Partition 1                               | Partition 2                  |
+|PMBR    | GPT Header | /boot/gptzfsboot (freebsd-boot partition) | freebsd-zfs containing /boot |
+|1 block | 33 blocks  | usually not very big, e.g., 512k          | probably the zroot volume    |
+
+1 block = 512 bytes
+
+/boot/gptzfsboot starts at block 0 of partition 1
+</code></pre></div></div>
+
+<p>In a real setup you would probably have a freebsd-swap partition before or after the freebsd-zfs partition.</p>
+
+<p><a href="http://www.freebsd.org/doc/en/books/arch-handbook/boot.html">Some more</a> information on the FreeBSD boot process on x86.</p>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

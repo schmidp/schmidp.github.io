@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - Full Disk Encryption with GRUB 2 + LUKS + LVM + SWRAID on Debian Jessie</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">Full Disk Encryption with GRUB 2 + LUKS + LVM + SWRAID on Debian Jessie</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          12 Dec 2014
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          1101 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>In January I started setting up a home server/NAS based on FreeBSD on a HP Microserver. Read about my setup in <a href="/2014/01/06/zfs-full-disk-encryption-with-freebsd-10-part-1/">part 1</a> and <a href="/2014/01/07/zfs-full-disk-encryption-with-freebsd-10-part-2/">part 2</a>.</p>
+
+<p>While I generally like the idea (BSD license, complete base system in one repo) and community behind FreeBSD, I have the feeling that the project is missing some manpower. VIMAGE is still experimental and in combination with PF it will crash every night (because of a Cron job). There seems to be a bug that IPSec tunnels bypass the firewall.
+There is no AMD support in bhyve yet (it’s scheduled for October 2014 with the 10.1 release), so I cannot run any virtual machines on my home server.</p>
+
+<p>So my concerns about manpower and the fact that I cannot run any virtual machines yet lead me back to Debian Linux.</p>
+
+<h1 id="the-plan">The Plan</h1>
+
+<p>Because with Debian I can use KVM and run multiple virtual machines, I’ll set up a minimalistic, fully encrypted base system with Debian. All services the NAS will supply will run in virtual machines that run Ubuntu, Debian or FreeBSD.</p>
+
+<h1 id="the-setup">The Setup</h1>
+
+<p>Before we finally talk about the setup, I’d like to give attribution to the blog posts that I based this guide on:</p>
+
+<ul>
+  <li><a href="http://michael-prokop.at/blog/2014/02/28/state-of-the-art-debianwheezy-deployments-with-grub-and-lvmsw-raidcrypto/">State of the art Debian/wheezy deployments with GRUB and LVM/SW-RAID/Crypto</a></li>
+  <li><a href="https://wiki.archlinux.org/index.php/Dm-crypt/Device_encryption">archlinux: dm-crypt/Device encryption</a></li>
+</ul>
+
+<h2 id="hardware">Hardware</h2>
+
+<p>I have four disks in my HP MicroServer:</p>
+
+<ul>
+  <li>Disk 1: Operating System - 3.5’ 250GB 7200RPM HDD</li>
+  <li>Disk 2: Operating System - 2.5’ 200GB 7200RPM HDD</li>
+  <li>Disk 3: Data - 3.5’ 4TB NAS HDD</li>
+  <li>Disk 4: Data - 3.5’ 4TB NAS HDD</li>
+</ul>
+
+<p>The first two disks will hold the base operating system and maybe the virtual machine operating system images.
+The data disks will be for data only.</p>
+
+<p>The storage system layers will look like this:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>| Filesystem (eg. ext4) |
+| LVM                   |
+| LUKS Crypto           |
+| Linux Software RAID 1 |
+| Physical Hard Disk    |
+</code></pre></div></div>
+
+<p>Above the physical block layer, we’ll put a Linux software RAID. The first RAID 1 will span disks 1 and 2 and a second RAID 1 will span the data disks (disks 3 and 4).</p>
+
+<p>And on top of the software RAID will be the encryption layer. Why not the other way round? Because otherwise we would have two crypto devices instead of one, and the CPU would have to encrypt/decrypt any write/read operation twice.</p>
+
+<p><a href="http://www.saout.de/pipermail/dm-crypt/2011-July/001789.html">This thread</a> on the dm-crypt list discusses the two options.</p>
+
+<h2 id="software">Software</h2>
+
+<p>We are going to use <a href="http://grml.org">grml</a>, a Debian-based rescue/admin live distribution, to install the system.</p>
+
+<p>So after downloading grml and booting the live CD, let’s start with becoming root:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">sudo </span>su -</code></pre></figure>
+
+<h3 id="initialize-the-disks-with-random-data">Initialize the disks with random data</h3>
+
+<p>We will start writing random data to the two operating system disks.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">badblocks <span class="nt">-c</span> 10240 <span class="nt">-w</span> <span class="nt">-t</span> random <span class="nt">-s</span> <span class="nt">-v</span> /dev/sda
+badblocks <span class="nt">-c</span> 10240 <span class="nt">-w</span> <span class="nt">-t</span> random <span class="nt">-s</span> <span class="nt">-v</span> /dev/sdb</code></pre></figure>
+
+<p>This may take a very long time, depending on how big your disks are.</p>
+
+<h3 id="partitioning-the-os-disks">Partitioning the OS disks</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># parted /dev/sda</span>
+GNU Parted 2.3
+Using /dev/sda
+Welcome to GNU Parted! Type <span class="s1">'help'</span> to view a list of commands.
+<span class="o">(</span>parted<span class="o">)</span> mklabel gpt                                                      
+<span class="o">(</span>parted<span class="o">)</span> mkpart primary 2048s 4095s
+<span class="o">(</span>parted<span class="o">)</span> <span class="nb">set </span>1 bios_grub on                                               
+<span class="o">(</span>parted<span class="o">)</span> name 1 <span class="s2">"BIOS Boot Partition"</span>                                     
+<span class="o">(</span>parted<span class="o">)</span> mkpart primary 4096s 100%                                        
+<span class="o">(</span>parted<span class="o">)</span> <span class="nb">set </span>2 raid on
+<span class="o">(</span>parted<span class="o">)</span> name 2 <span class="s2">"SW-RAID / Linux"</span>                                         
+<span class="o">(</span>parted<span class="o">)</span> quit                                                             
+Information: You may need to update /etc/fstab.</code></pre></figure>
+
+<p>Copy the the partition table from the first disk to the second:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># sgdisk -R=/dev/sdb /dev/sda</span>
+The operation has completed successfully.</code></pre></figure>
+
+<p>Set new UUIDs on /dev/sdb:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># sgdisk -G /dev/sdb</span>
+The operation has completed successfully.</code></pre></figure>
+
+<h3 id="raid-mirror-setup">RAID Mirror Setup</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># mdadm --create /dev/md0 --verbose --level=mirror --raid-devices=2 /dev/sda2 /dev/sdb2</span>
+mdadm: Note: this array has metadata at the start and
+    may not be suitable as a boot device.  If you plan to
+    store <span class="s1">'/boot'</span> on this device please ensure that
+    your boot-loader understands md/v1.x metadata, or use
+    <span class="nt">--metadata</span><span class="o">=</span>0.90
+mdadm: size <span class="nb">set </span>to 10474496K
+Continue creating array? y
+mdadm: Defaulting to version 1.2 metadata
+mdadm: array /dev/md0 started.</code></pre></figure>
+
+<h3 id="luks-crypto-setup">LUKS Crypto Setup</h3>
+
+<p>We use aes-xts as XTS works especially well for encrypting filesystems.<br />
+The keysize of 512 is actually 256, because XTS splits the key in half.<br />
+Because we use sha512 instead of sha1, we need to increase the time for the hash iterations.<br />
+Also, we have to use /dev/random instead of /dev/urandom, as urandom does not stop giving data if entropy gets low.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">cryptsetup <span class="nt">-v</span> <span class="nt">--cipher</span> aes-xts-plain64 <span class="nt">--key-size</span> 512 <span class="nt">--hash</span> sha512 <span class="nt">--iter-time</span> 5000 <span class="nt">--use-random</span> <span class="nt">--verify-passphrase</span> luksFormat /dev/md0</code></pre></figure>
+
+<p>Now let’s open the crypto device:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">cryptsetup luksOpen /dev/md0 cryptomd0</code></pre></figure>
+
+<h3 id="lvm-setup">LVM Setup</h3>
+
+<p>Let’s create a physical volume and a volume group:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># pvcreate /dev/mapper/cryptomd0</span>
+  Physical volume <span class="s2">"/dev/mapper/cryptomd0"</span> successfully created
+root@grml ~ <span class="c"># vgcreate system /dev/mapper/cryptomd0</span>
+  Volume group <span class="s2">"system"</span> successfully created</code></pre></figure>
+
+<p>Now the logical volumes. Be sure to ajust the sizes of the volumes to fit your system:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># lvcreate -n swap -L1G system</span>
+  Logical volume <span class="s2">"swap"</span> created
+root@grml ~ <span class="c"># lvcreate -n root -L6G system</span>
+  Logical volume <span class="s2">"root"</span> created</code></pre></figure>
+
+<h3 id="create-the-file-systems">Create the file systems</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># mkfs.ext4 /dev/system/root</span>
+mke2fs 1.42.9 <span class="o">(</span>4-Feb-2014<span class="o">)</span>
+Filesystem <span class="nv">label</span><span class="o">=</span>
+OS <span class="nb">type</span>: Linux
+Block <span class="nv">size</span><span class="o">=</span>4096 <span class="o">(</span><span class="nv">log</span><span class="o">=</span>2<span class="o">)</span>
+Fragment <span class="nv">size</span><span class="o">=</span>4096 <span class="o">(</span><span class="nv">log</span><span class="o">=</span>2<span class="o">)</span>
+<span class="nv">Stride</span><span class="o">=</span>0 blocks, Stripe <span class="nv">width</span><span class="o">=</span>0 blocks
+393216 inodes, 1572864 blocks
+78643 blocks <span class="o">(</span>5.00%<span class="o">)</span> reserved <span class="k">for </span>the super user
+First data <span class="nv">block</span><span class="o">=</span>0
+Maximum filesystem <span class="nv">blocks</span><span class="o">=</span>1610612736
+48 block groups
+32768 blocks per group, 32768 fragments per group
+8192 inodes per group
+Superblock backups stored on blocks:
+  32768, 98304, 163840, 229376, 294912, 819200, 884736
+
+Allocating group tables: <span class="k">done                            
+</span>Writing inode tables: <span class="k">done                            
+</span>Creating journal <span class="o">(</span>32768 blocks<span class="o">)</span>: <span class="k">done
+</span>Writing superblocks and filesystem accounting information: <span class="k">done</span></code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># mkswap -f /dev/system/swap</span>
+Setting up swapspace version 1, size <span class="o">=</span> 1048572 KiB
+no label, <span class="nv">UUID</span><span class="o">=</span>a44ea90d-72b4-4d2c-864f-70e9d2218651</code></pre></figure>
+
+<h3 id="preparing-for-installation">Preparing for installation</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># mkdir /mnt/root</span>
+root@grml ~ <span class="c"># mount /dev/system/root /mnt/root</span></code></pre></figure>
+
+<h3 id="installation">Installation</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">grml-debootstrap <span class="nt">--target</span> /mnt/root <span class="nt">--password</span> YOUR_PASSWORD <span class="nt">--hostname</span> YOUR_HOSTNAME <span class="nt">--release</span> jessie</code></pre></figure>
+
+<h3 id="finishing-the-installation">Finishing the installation</h3>
+
+<p>Let’s get into our new installation:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># grml-chroot /mnt/root /bin/bash</span>
+Writing /etc/debian_chroot ...
+<span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:/#</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="o">(</span>rna<span class="o">)</span>root@grml:~# apt-get install console-setup</code></pre></figure>
+
+<p>Edit /etc/fstab to look like:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">/dev/system/root  / auto    defaults,errors<span class="o">=</span>remount-ro  0 1
+/dev/system/swap  none  swap    sw                      0 0
+proc      /proc proc    defaults                        0 0</code></pre></figure>
+
+<p>Edit /etc/crypttab to look like:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">cryptomd0 /dev/md0 none luks</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:~# <span class="nb">echo </span><span class="nv">GRUB_CRYPTODISK_ENABLE</span><span class="o">=</span>y <span class="o">&gt;&gt;</span> /etc/default/grub
+<span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:~# <span class="nb">echo</span> <span class="s1">'GRUB_PRELOAD_MODULES="lvm cryptodisk mdraid1x"'</span> <span class="o">&gt;&gt;</span> /etc/default/grub</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:/# grub-install /dev/sda
+Installation finished. No error reported.
+<span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:/# grub-install /dev/sdb
+Installation finished. No error reported.</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:/# update-initramfs <span class="nt">-k</span> all <span class="nt">-u</span>
+update-initramfs: Generating /boot/initrd.img-3.14-1-amd64
+df: Warning: cannot <span class="nb">read </span>table of mounted file systems
+<span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:~# update-grub
+Generating grub.cfg ...
+Found linux image: /boot/vmlinuz-3.14-1-amd64
+Found initrd image: /boot/initrd.img-3.14-1-amd64
+<span class="k">done</span></code></pre></figure>
+
+<h3 id="prepare-for-reboot">Prepare for reboot</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="o">(</span>YOUR_HOSTNAME<span class="o">)</span>root@grml:~# <span class="nb">exit
+exit
+</span>grml-chroot /mnt/root /bin/bash  9.21s user 2.43s system 0% cpu 21:20.00 total
+root@grml ~ <span class="c"># umount /mnt/root</span></code></pre></figure>
+
+<h3 id="reboot">Reboot</h3>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@grml ~ <span class="c"># reboot</span></code></pre></figure>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - Invoice App</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">Invoice App</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          07 Jan 2010
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          530 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>I’ve been officially self-employed for about a year now, and one of the duties that involves is creating invoices.</p>
+
+<p>Not that I have to write lots of invoices - I usually create about one or two a month, so I don’t need a sophisticated billing solution.</p>
+
+<p>Still, I’m an internet geek, so a while ago I started a search for the perfect invoicing tool to fit my needs.</p>
+
+<p>Here are some of the sites I remember having tried back then:</p>
+
+<ul>
+  <li><a href="http://invoicemachine.com">invoicemachine.com</a></li>
+  <li><a href="http://freshbooks.com">freshbooks.com</a></li>
+  <li><a href="http://lessaccounting.com">lessaccounting.com</a></li>
+  <li><a href="http://freeagentcentral.com">freeagentcentral.com</a></li>
+</ul>
+
+<p>I was really looking for a simple app, but then decided to stay with FreeAgent, because it allowed me to import my bank statements and to be my own accountant.</p>
+
+<p>I don’t remember why I didn’t choose The Invoice Machine, as it looks really nice and simple to me now.</p>
+
+<p>Anyway, I did go with FreeAgent, and it is a very nice app, but I experienced two main problems which led me to the app I’m going to talk about in a minute.</p>
+
+<p>The first problem is that, while I had a lot of data within FreeAgent, I don’t have much of a clue about accounting and I have a real accountant anyway.<br />
+So the data in FreeAgent wasn’t really correct and was redundant to the work done by my accountant.</p>
+
+<p>The second reason I quit FreeAgent about two weeks ago is that I’m now cofounder of <a href="http://openresearch.com">another company</a> where we need to write invoices as well, and I didn’t want to pay another $20 a month just for invoicing.</p>
+
+<p>While $40 dollars a month isn’t that much by itself, it adds up with other subscriptions. There are the two Basecamp accounts, the flickr accounts, the . . . know what I mean?</p>
+
+<p>At first I started creating invoices with Apple Pages, but it just didn’t feel right to me. Maybe because you have to spend more time formatting than creating the content, maybe because sharing and storing is a pain - I don’t really know.</p>
+
+<p>So about two weeks ago, we just started to build our own little invoice generator to fit our needs exactly, and it took only a few days from start to finish.</p>
+
+<p>Here is a short feature list:</p>
+
+<ul>
+  <li>Built for us, but usable by everyone</li>
+  <li>See what your invoice looks like, while editing it</li>
+  <li>Upload your own invoice templates (with support for different languages)</li>
+  <li>Generate a PDF for sharing or printing</li>
+  <li>Track the payment state of your invoice (due, overdue, paid)</li>
+  <li>Manage your contacts  (very, very simple) and see who owes you what</li>
+  <li>One account can be administrated by multiple users</li>
+  <li>A user can be associated with multiple accounts, and we have an account switch bar like 37signals new launchbar</li>
+  <li>German and english localization</li>
+  <li>It’s free</li>
+</ul>
+
+<p>It’s called <a href="http://invoiceapp.com">Invoice App</a> and is a straightforward Rails application. We initially started it as a Rails 3 pre-app for fun, but then switched back to the current stable version to save some time and get it usable as fast as possible.</p>
+
+<p>We plan to keep it as a free tool as long as hosting or support costs don’t become a significant factor.</p>
+
+<p>Please give it <a href="http://signup.invoiceapp.com">a spin</a> and send us your feedback at: <a href="mailto:feedback@invoiceapp.com">feedback@invoiceapp.com</a></p>
+
+<p><img src="/assets/wordpress/invoice_screenshot1.png" alt="invoice_screenshot" title="invoice_screenshot" width="600" height="685" class="aligncenter size-full wp-image-359" /></p>
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

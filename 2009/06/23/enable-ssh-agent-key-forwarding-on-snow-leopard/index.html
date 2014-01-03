@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - Enable SSH Agent (Key) Forwarding on Snow Leopard</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">Enable SSH Agent (Key) Forwarding on Snow Leopard</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          23 Jun 2009
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          170 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>I’m using Git and Capistrano to deploy some Ruby applications on multiple servers. My Git setup is done with <a href="http://scie.nti.st/2007/11/14/hosting-git-repositories-the-easy-and-secure-way">gitosis</a>, which uses key-based authentication over SSH. The deployment script logs into the remote servers and checks out the current application version via Git.</p>
+
+<p>To make this work, one must forward the private key, used for authentication with Git, to the server which performs the check. This is done by the <em>ssh-agent</em> process, with which you can register your keys by running the command <em>ssh-add</em>.</p>
+
+<p>After I switched to Snow Leopard, my deployment script stopped working, because somehow the SSH key didn’t get forwarded to the server. I was presented with this login prompt: <code class="highlighter-rouge">Enter password for git@git.gitserver.local:</code><br />
+Of course I didn’t have a password, because Gitosis uses key-based authentication only.</p>
+
+<p>To make a long story short, Snow Leopard ships with key forwarding disabled by default and you have to modify the file <code class="highlighter-rouge">/etc/ssh_config</code> to get it working.</p>
+
+<p>Just change the line</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># ForwardAgent no</span></code></pre></figure>
+
+<p>into</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">ForwardAgent yes</code></pre></figure>
+
+<p>and you’re good.</p>
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

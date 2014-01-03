@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - FreeBSD 10: does SWAP work on a ZVOL?</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">FreeBSD 10: does SWAP work on a ZVOL?</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          05 Jan 2014
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          704 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>TL;DR: No, keep them on separate swap partitions.</p>
+
+<p>–</p>
+
+<p>I’m working on a secure ZFS installation for my home NAS and plan to use ZFS as the filesystem. One goal is to have everything on disk encrypted.</p>
+
+<p>While the new FreeBSD 10 installer can automatically partition your hard disk with an encrypted ZFS setup, the <code class="highlighter-rouge">swap</code> partition is not encrypted.</p>
+
+<p>I also plan to mirror the swap space, so that if one disk goes down in my RAID 1 (or zmirror) setup, the system will keep running.
+If you placed a swap partition on each disk in a two-disk setup and they were not mirrored, the system would crash if one disk became unresponsive.</p>
+
+<p>So my first idea was just to store the swap space in the ZFS pool instead of creating a separate swap partition that would need to be mirrored and encrypted.</p>
+
+<p>Now, there are two options to store swap space on a ZFS pool:</p>
+
+<ol>
+  <li>Use a file as swap space that is stored on a ZFS filesystem</li>
+  <li>Store the swap space in a ZVOL</li>
+</ol>
+
+<p>The first option is a no-go, because in case of low memory, ZFS needs memory to manage the disk writes to the swap file, but as there is no memory available it needs to write to the swap file, but ZFS needs memory to manage the disk writes to the swap file . . .</p>
+
+<p>The second option the internetz suggests is to create a ZVOL and use that as swap space.
+That seems to work on first sight, and even Sun/Oracle suggested it in a <a href="https://blogs.oracle.com/jimlaurent/entry/faq_using_zfs_for_swap">blog post</a>.</p>
+
+<p>Also, the FreeBSD Wiki has something to say on how to create a ZVOL usable for swap space:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">zfs create <span class="nt">-V</span> 2G <span class="nt">-o</span> org.freebsd:swap<span class="o">=</span>on <span class="nt">-o</span> <span class="nv">checksum</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">dedup</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">sync</span><span class="o">=</span>disabled <span class="nt">-o</span> <span class="nv">primarycache</span><span class="o">=</span>none zroot/swap</code></pre></figure>
+
+<p><strong>But</strong> they added a note:</p>
+
+<blockquote>
+  <p>If there is no real memory available, the system might become unresponsive.</p>
+</blockquote>
+
+<p>Because storing the swap space in a ZVOL would be much more convenient (at least if you don’t need kernel crash dumps, which wouldn’t work this way), I wanted to try for myself.</p>
+
+<p>I wrote a little C program that just allocates memory and then waits for 10 minutes so that the memory is not immediately released:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="cp">#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;time.h&gt;
+</span>
+<span class="kt">void</span> <span class="nf">alloc_one_meg</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kt">int</span> <span class="n">number_of_bytes_of_int</span> <span class="o">=</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+    <span class="kt">int</span> <span class="n">number_of_ints_for_one_megabyte</span> <span class="o">=</span> <span class="mi">1024</span><span class="o">*</span><span class="mi">1024</span><span class="o">/</span><span class="n">number_of_bytes_of_int</span><span class="p">;</span>
+    <span class="kt">int</span> <span class="o">*</span><span class="n">megabyte</span> <span class="o">=</span> <span class="n">malloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span> <span class="o">*</span> <span class="n">number_of_ints_for_one_megabyte</span><span class="p">);</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">number_of_ints_for_one_megabyte</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">megabyte</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">rand</span><span class="p">();</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">waitFor</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">secs</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">printf</span><span class="p">(</span><span class="s">"waiting for %d seconds</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">secs</span><span class="p">);</span>
+
+    <span class="kt">int</span> <span class="n">retTime</span> <span class="o">=</span> <span class="n">time</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="n">secs</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="n">time</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">retTime</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span> <span class="p">(</span> <span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">argv</span><span class="p">[]</span> <span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span> <span class="n">argc</span> <span class="o">!=</span> <span class="mi">2</span> <span class="p">)</span> <span class="p">{</span>
+        <span class="n">printf</span><span class="p">(</span> <span class="s">"usage: %s &lt;megabytes&gt;</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">);</span>
+
+    <span class="p">}</span> <span class="k">else</span>  <span class="p">{</span>
+
+        <span class="kt">int</span> <span class="n">number_of_megabytes</span><span class="p">;</span>
+        <span class="n">sscanf</span> <span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span><span class="s">"%d"</span><span class="p">,</span><span class="o">&amp;</span><span class="n">number_of_megabytes</span><span class="p">);</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">number_of_megabytes</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">alloc_one_meg</span><span class="p">();</span>
+        <span class="p">}</span>
+
+        <span class="n">printf</span><span class="p">(</span><span class="s">"allocated %d MB</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">number_of_megabytes</span><span class="p">);</span>
+
+        <span class="n">waitFor</span><span class="p">(</span><span class="mi">600</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Download link: <a href="/assets/posts/2014-01-05-freebsd-10-does-work-on-a-zvol/memory.c">memory.c</a></p>
+
+<p>You can compile and run the program on a vanilla FreeBSD installation by running:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># clang -o memory memory.c</span>
+<span class="c"># ./memory &lt;number of megabytes&gt;</span></code></pre></figure>
+
+<p>My test system is a VMware virtual machine with 256MB RAM.</p>
+
+<h1 id="swap-partition">SWAP partition</h1>
+
+<p>Now let’s see how the system behaves if we run memory.c on an installation with a normal 2GB swap partition:</p>
+
+<p><img width="100%" src="/assets/posts/2014-01-05-freebsd-10-does-work-on-a-zvol/swap_partition.png" /></p>
+
+<p>The system stays responsive and kills memory.c as soon as it runs out of swap space.</p>
+
+<h1 id="zvol">ZVOL</h1>
+
+<p>Now let’s try the same thing with the swap space on a ZVOL:</p>
+
+<p><img width="100%" src="/assets/posts/2014-01-05-freebsd-10-does-work-on-a-zvol/zvol_hang.png" /></p>
+
+<p>It still replies to <code class="highlighter-rouge">ping</code> requests, but it has stopped being responsive. You cannot kill memory.c or do anything else useful.</p>
+
+<p><img width="100%" src="/assets/posts/2014-01-05-freebsd-10-does-work-on-a-zvol/swap_zvol_top.png" /></p>
+
+<p>As you can see in the <code class="highlighter-rouge">top</code> output, which I had running on the second console, the system has 256MB RAM and 512MB swap space. So the 300MB shouldn’t even have used up the whole swap space.</p>
+
+<p>And if you can trust the <code class="highlighter-rouge">top</code> output, it crashed with only about 60MB of swap space used.</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>Some people have suggested reserving memory via kernel parameters (<a href="https://github.com/zfsonlinux/zfs/issues/342#issuecomment-5137629">in that case ZFSOnLinux</a>), but I’m aiming for a stable, maintainable system and reserving memory might just delay the problem, if it helped at all.</p>
+
+<p>So the way to go is to keep swap space off ZFS and use separate partitions - like the FreeBSD 10 ZFS installer already does.</p>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - ZFS Full Disk Encryption with FreeBSD 10 - Part 2</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">ZFS Full Disk Encryption with FreeBSD 10 - Part 2</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          07 Jan 2014
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          2147 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <h1 id="part-1">Part 1</h1>
+
+<p>Before continuing, be sure to <a href="/2014/01/06/zfs-full-disk-encryption-with-freebsd-10-part-1/">read part 1</a> of this blogpost.</p>
+
+<h1 id="what-you-will-need">What you will need</h1>
+
+<ul>
+  <li>1 at least 1GB USB stick for the FreeBSD installer image</li>
+  <li>1 or more xGB USB sticks for the boot files and encryption keys</li>
+</ul>
+
+<p>You should create multiple copies of the USB stick that holds the boot files and encryption keys. If you lose the stick or the data gets corrupted and you don’t have another copy, all your data stored on the encrypted disks is lost.</p>
+
+<h1 id="booting-the-freebsd-installer">Booting the FreeBSD Installer</h1>
+
+<p>I’m using a USB stick with the FreeBSD 10 memstick image to boot into the FreeBSD installer. <a href="/2014/01/04/getting-the-freebsd-10-installer-onto-an-usb-stick-under-mac-os-x/">See here</a> for a Mac OS X guide on how to get the memstick image onto a USB stick.</p>
+
+<p>Now after your system finishes booting from the USB stick, it should present you with a blue, text-based installer giving you three options:</p>
+
+<ul>
+  <li>Install</li>
+  <li>Shell</li>
+  <li>Live CD</li>
+</ul>
+
+<p>We will start by dropping into the <strong>shell</strong> and run <code class="highlighter-rouge">su -</code> to get a root shell.</p>
+
+<h1 id="sshd">SSHd</h1>
+
+<p>I will assume that your server is connected to your LAN during the installation.
+That way we can start an SSH daemon from the installer image and use our Mac or PC to enter the setup commands or copy files to the server.</p>
+
+<p>So, on the shell on your server, run</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">ifconfig
+bge0: <span class="nv">flags</span><span class="o">=</span>8843&lt;UP,BROADCAST,RUNNING,SIMPLEX,MULTICAST&gt; metric 0 mtu 1500
+	<span class="nv">options</span><span class="o">=</span>c019b&lt;RXCSUM,TXCSUM,VLAN_MTU,VLAN_HWTAGGING,VLAN_HWCSUM,TSO4,VLAN_HWTSO,LINKSTATE&gt;
+	ether XX:XX:XX:XX:XX:XX
+	nd6 <span class="nv">options</span><span class="o">=</span>29&lt;PERFORMNUD,IFDISABLED,AUTO_LINKLOCAL&gt;
+	media: Ethernet autoselect <span class="o">(</span>1000baseT &lt;full-duplex&gt;<span class="o">)</span>
+	status: active
+lo0: <span class="nv">flags</span><span class="o">=</span>8049&lt;UP,LOOPBACK,RUNNING,MULTICAST&gt; metric 0 mtu 16384
+	<span class="nv">options</span><span class="o">=</span>600003&lt;RXCSUM,TXCSUM,RXCSUM_IPV6,TXCSUM_IPV6&gt;
+	inet6 ::1 prefixlen 128 
+	inet6 fe80::1%lo0 prefixlen 64 scopeid 0x2 
+	inet 127.0.0.1 netmask 0xff000000 
+	nd6 <span class="nv">options</span><span class="o">=</span>21&lt;PERFORMNUD,AUTO_LINKLOCAL&gt;</code></pre></figure>
+
+<p>to identify your network interface name. In my case it’s <code class="highlighter-rouge">bge0</code>.</p>
+
+<p>And then:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">dhclient &lt;your-network-interface-name&gt;
+DHCPDISCOVER on bge0 to 255.255.255.255 port 67 interval 8
+DHCPOFFER from 192.168.1.1
+DHCPREQUEST on bge0 to 255.255.255.255 port 67
+DHCPACK from 192.168.1.1
+bound to 192.168.1.45 <span class="nt">--</span> renewal <span class="k">in </span>21600 seconds.</code></pre></figure>
+
+<p>to get an IPv4 address, in my case <code class="highlighter-rouge">192.168.1.45</code>.</p>
+
+<p>If your LAN does not offer you an IP address via DHCP, run <code class="highlighter-rouge">man ifconfig</code> and read up on how to configure a network card manually.</p>
+
+<p>Let’s say your server is now connected to your LAN and has an IPv4 address. We can now start an SSH daemon by running:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">mkdir /tmp/etc
+mount_unionfs /tmp/etc /etc
+<span class="nb">echo</span> <span class="s2">"PermitRootLogin yes"</span> <span class="o">&gt;&gt;</span> /etc/ssh/sshd_config
+passwd root
+service sshd onestart</code></pre></figure>
+
+<p>The root password you are asked to enter is just for the installer; it’s not the root password you will use later for your installation.</p>
+
+<p>Now to login to the installer image by running <code class="highlighter-rouge">ssh root@&lt;ip-address-of-your-server&gt;</code> on your Mac or PC.</p>
+
+<p>This guide should also work if you enter all the commands on the command line yourself, but doing it over SSH is more convenient.</p>
+
+<h1 id="identifying-your-disks">Identifying your disks</h1>
+
+<p>Now let’s see which storage devices are connected to your server:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">camcontrol devlist
+&lt;VB0250EAVER HPG9&gt;                 at scbus0 target 0 lun 0 <span class="o">(</span>pass0,ada0<span class="o">)</span>
+&lt;VB0250EAVER HPG9&gt;                 at scbus1 target 0 lun 0 <span class="o">(</span>pass1,ada1<span class="o">)</span>
+&lt;ST4000VN000-1H4168 SC43&gt;          at scbus2 target 0 lun 0 <span class="o">(</span>pass2,ada2<span class="o">)</span>
+&lt;ST4000VN000-1H4168 SC43&gt;          at scbus3 target 0 lun 0 <span class="o">(</span>pass3,ada3<span class="o">)</span>
+&lt;Sony USB Stick&gt;                   at scbus6 target 0 lun 0 <span class="o">(</span>pass4,da0<span class="o">)</span></code></pre></figure>
+
+<p>In my case I have four hard disks and one USB stick (<code class="highlighter-rouge">da0</code>)
+We’ll create two zpools, one for the OS installation and for data.
+In my case I’ll use the disks <code class="highlighter-rouge">ada0</code> and <code class="highlighter-rouge">ada1</code> for the OS and <code class="highlighter-rouge">ada2</code> and <code class="highlighter-rouge">ada3</code> for my data.</p>
+
+<p>The device names are probably different on your system. Please consult <a href="https://www.freebsd.org/doc/handbook/disk-organization.html#basics-dev-codes">FreeBSD Disk device names</a> to find out how FreeBSD names attached storage devices.</p>
+
+<h1 id="randomizing">Randomizing</h1>
+
+<p>We will start by writing random data to the two operating system disks.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">dd <span class="k">if</span><span class="o">=</span>/dev/random <span class="nv">of</span><span class="o">=</span>/dev/ada0 <span class="nv">bs</span><span class="o">=</span>1m &amp;
+dd <span class="k">if</span><span class="o">=</span>/dev/random <span class="nv">of</span><span class="o">=</span>/dev/ada1 <span class="nv">bs</span><span class="o">=</span>1m</code></pre></figure>
+
+<p>This will take a very long time, depending on how big your disks are.</p>
+
+<h1 id="partitioning">Partitioning</h1>
+
+<p>Now let’s start partitioning the disks. This is what the layout will look like in the end:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>| Hard Disk Device | Partition 1               | Partition 2                        |
+-------------------------------------------------------------------------------------
+| ada0             | ada0p1 freebsd-swap       | ada0p2 freebsd-zfs OS installation |
+| ada1             | ada1p1 freebsd-swap       | ada1p2 freebsd-zfs OS installation |
+-------------------------------------------------------------------------------------
+</code></pre></div></div>
+
+<p>As I said, we are going to store the bootcode, kernel and keyfiles on a USB stick, so there is no need for a boot partition.</p>
+
+<p>You might also notice that we’ll create separate swap partitions and won’t use a ZVOL for swap. <a href="/2014/01/05/freebsd-10-does-swap-work-on-a-zvol/">Here is why.</a></p>
+
+<p><strong>The next steps will destroy any data on your drives:</strong></p>
+
+<p>To better understand the following commands it would be a good idea to read the manpage of gpart: <code class="highlighter-rouge">man gpart</code>.</p>
+
+<p>Clean the drives of existing partition tables:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart destroy <span class="nt">-F</span> ada0
+gpart destroy <span class="nt">-F</span> ada1</code></pre></figure>
+
+<p>If you get a message like <code class="highlighter-rouge">gpart: arg0 'ada2': Invalid argument</code>, that’s fine and you can ignore it. It just means that there was no partition table on the disk anyway.</p>
+
+<p>Create a GPT partition table on each disk:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart create <span class="nt">-s</span> gpt ada0
+gpart create <span class="nt">-s</span> gpt ada1</code></pre></figure>
+
+<p>Nowadays, disks (especially very large ones) use a sector format called “<a href="http://en.wikipedia.org/wiki/Advanced_Format">Advanced Format</a>”. Long story short, even if you don’t have Advanced Format disks, we are going to align the partitions with 4K sectors. <a href="http://savagedlight.me/2012/07/15/freebsd-zfs-advanced-format/">This blog post</a> explains it quite well in a ZFS/FreeBSD context.</p>
+
+<p>Next we are going to create the swap partition. You will have to choose how big your swap partition is going to be. I’ll create a swap partition of the same size as the memory I’m planning on having in the server, so I’ll choose 16GB. You might have different needs. <a href="https://wiki.freebsd.org/SystemTuning#Swap">https://wiki.freebsd.org/SystemTuning#Swap</a> suggests the following:</p>
+
+<blockquote>
+  <p>Size swap space to approximately twice the size of main memory on systems with less than 4GB RAM and the size of main memory for systems with more than 4GB. If in doubt, allocate more swap; allocating insufficient swap is far worse than allocating too much. If the system has multiple disks, reduce swap I/O contention by spreading swap across the disks, ideally in equally sized partitions.</p>
+</blockquote>
+
+<p>We are using labels so we can more easily replace hardware later.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart add <span class="nt">-l</span> swap0 <span class="nt">-t</span> freebsd-swap <span class="nt">-a</span> 1m <span class="nt">-s</span> 16G ada0 <span class="c"># start at 4096 * 256 byte</span>
+gpart add <span class="nt">-l</span> swap1 <span class="nt">-t</span> freebsd-swap <span class="nt">-a</span> 1m <span class="nt">-s</span> 16G ada1 <span class="c"># start at 4096 * 256 byte</span></code></pre></figure>
+
+<p>Now for the OS partition. Because I still have a few spare 160GB drives, I’m only going to use 140GB for the OS partition, so that if one of the current disks fails, I can easily replace it with one of my 160GB spares.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart add <span class="nt">-l</span> zroot0 <span class="nt">-s</span> 140G <span class="nt">-t</span> freebsd-zfs ada0 <span class="c"># only use 140GB</span>
+gpart add <span class="nt">-l</span> zroot1 <span class="nt">-s</span> 140G <span class="nt">-t</span> freebsd-zfs ada1 <span class="c"># only use 140GB</span></code></pre></figure>
+
+<p>If you want to use all the remaining space on your disks (<strong>which is what I would normally do</strong>), run this instead:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart add <span class="nt">-l</span> zroot0 <span class="nt">-t</span> freebsd-zfs ada0 <span class="c"># use the whole remaining space</span>
+gpart add <span class="nt">-l</span> zroot1 <span class="nt">-t</span> freebsd-zfs ada1 <span class="c"># use the whole remaining space</span></code></pre></figure>
+
+<p>What have we done?</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@:~ <span class="c"># gpart show ada0</span>
+<span class="o">=&gt;</span>       34  390721901  ada0  GPT  <span class="o">(</span>186G<span class="o">)</span>
+         34       2014        - free -  <span class="o">(</span>1.0M<span class="o">)</span>
+       2048   33554432     1  freebsd-swap  <span class="o">(</span>16G<span class="o">)</span>
+   33556480  293601280     2  freebsd-zfs  <span class="o">(</span>140G<span class="o">)</span>
+  327157760   63564175        - free -  <span class="o">(</span>30G<span class="o">)</span>
+
+root@:~ <span class="c">#  gpart show ada1</span>
+<span class="o">=&gt;</span>       34  488397101  ada1  GPT  <span class="o">(</span>233G<span class="o">)</span>
+         34       2014        - free -  <span class="o">(</span>1.0M<span class="o">)</span>
+       2048   33554432     1  freebsd-swap  <span class="o">(</span>16G<span class="o">)</span>
+   33556480  454840655     2  freebsd-zfs  <span class="o">(</span>217G<span class="o">)</span></code></pre></figure>
+
+<p>We will come back to the two empty data disks later.</p>
+
+<h1 id="swap-raid-1">SWAP Raid 1</h1>
+
+<p>Since we have two OS disks that…</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">kldload geom_mirror
+gmirror label <span class="nt">-b</span> load <span class="nt">-F</span> swap /dev/gpt/swap0 /dev/gpt/swap1</code></pre></figure>
+
+<h1 id="encryption">Encryption</h1>
+
+<p>We are going to use GELI for the encryption. Basically it will encrypt each sector transparently. ZFS itself doesn’t know it is being encrypted:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>| ZFS                |
+| GELI Encryption    | 
+| Physical Hard Disk |
+</code></pre></div></div>
+
+<h2 id="preparation">Preparation</h2>
+
+<p>Load the kernel modules that are needed for GEOM and ZFS:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">kldload opensolaris
+kldload zfs
+kldload geom_eli</code></pre></figure>
+
+<h2 id="swap">Swap</h2>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">geli onetime <span class="nt">-d</span> <span class="nt">-e</span> AES-XTS <span class="nt">-l</span> 256 <span class="nt">-s</span> 4096 /dev/mirror/swap</code></pre></figure>
+
+<h2 id="operating-system-partitions">Operating System Partitions</h2>
+
+<p>Insert the USB stick that you plan to use as a boot device. Mine is da1.
+You will usually see some debug output about the just-connected USB stick on the server shell (not via SSH). It should also show the device name.</p>
+
+<p>But you can always check your devices again with:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">camcontrol devlist
+&lt;VB0250EAVER HPG9&gt;                 at scbus0 target 0 lun 0 <span class="o">(</span>pass0,ada0<span class="o">)</span>
+&lt;VB0250EAVER HPG9&gt;                 at scbus1 target 0 lun 0 <span class="o">(</span>pass1,ada1<span class="o">)</span>
+&lt;ST4000VN000-1H4168 SC43&gt;          at scbus2 target 0 lun 0 <span class="o">(</span>pass2,ada2<span class="o">)</span>
+&lt;ST4000VN000-1H4168 SC43&gt;          at scbus3 target 0 lun 0 <span class="o">(</span>pass3,ada3<span class="o">)</span>
+&lt;Sony USB Stick&gt;                   at scbus6 target 0 lun 0 <span class="o">(</span>pass4,da0<span class="o">)</span>
+&lt;Sony USB Stick&gt;                   at scbus7 target 0 lun 0 <span class="o">(</span>da1,pass5<span class="o">)</span></code></pre></figure>
+
+<p>Create the boot partition and install bootcode:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart destroy <span class="nt">-F</span> da1
+gpart create <span class="nt">-s</span> gpt da1
+
+gpart add <span class="nt">-l</span> gptboot0 <span class="nt">-s</span> 512k <span class="nt">-t</span> freebsd-boot da1
+
+gpart bootcode <span class="nt">-b</span> /boot/pmbr <span class="nt">-p</span> /boot/gptzfsboot <span class="nt">-i</span> 1 da1</code></pre></figure>
+
+<p>Let’s create the ZFS partition and boot pool:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart add <span class="nt">-l</span> boot0 <span class="nt">-t</span> freebsd-zfs da1
+
+mkdir <span class="nt">-p</span> /tmp/mnt/bootpool
+
+zpool create <span class="nt">-m</span> /tmp/mnt/bootpool bootpool /dev/gpt/boot0
+
+mkdir <span class="nt">-p</span> /tmp/mnt/bootpool/boot/zfs
+
+mount_nullfs /tmp/mnt/bootpool/boot/zfs /boot/zfs</code></pre></figure>
+
+<p>Create OS encryption key:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">mkdir /tmp/mnt/bootpool/boot/keys
+dd <span class="k">if</span><span class="o">=</span>/dev/random <span class="nv">of</span><span class="o">=</span>/tmp/mnt/bootpool/boot/keys/zroot_encryption.key <span class="nv">bs</span><span class="o">=</span>64 <span class="nv">count</span><span class="o">=</span>1</code></pre></figure>
+
+<p>Encrypt OS disks:</p>
+
+<p>Choosing your password <a href="http://security.stackexchange.com/questions/25375/why-not-use-larger-cipher-keys/25392#25392">how long</a></p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">mkdir /tmp/mnt/bootpool/boot/metadata_backup
+
+geli init <span class="nt">-b</span> <span class="nt">-s</span> 4096 <span class="nt">-e</span> AES-XTS <span class="nt">-l</span> 256 <span class="nt">-K</span> /tmp/mnt/bootpool/boot/keys/zroot_encryption.key <span class="nt">-B</span> /tmp/mnt/bootpool/boot/metadata_backup/ada0p2.eli /dev/ada0p2
+geli init <span class="nt">-b</span> <span class="nt">-s</span> 4096 <span class="nt">-e</span> AES-XTS <span class="nt">-l</span> 256 <span class="nt">-K</span> /tmp/mnt/bootpool/boot/keys/zroot_encryption.key <span class="nt">-B</span> /tmp/mnt/bootpool/boot/metadata_backup/ada1p2.eli /dev/ada1p2</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">geli attach <span class="nt">-k</span> /tmp/mnt/bootpool/boot/keys/zroot_encryption.key /dev/ada0p2
+geli attach <span class="nt">-k</span> /tmp/mnt/bootpool/boot/keys/zroot_encryption.key /dev/ada1p2</code></pre></figure>
+
+<h1 id="zfs-zroot-pool">ZFS zroot pool</h1>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">mkdir <span class="nt">-p</span> /tmp/mnt/zroot
+
+zpool create <span class="nt">-m</span> none zroot mirror /dev/ada0p2.eli /dev/ada1p2.eli
+
+zfs <span class="nb">set </span><span class="nv">checksum</span><span class="o">=</span>on zroot
+zfs <span class="nb">set </span><span class="nv">atime</span><span class="o">=</span>off zroot
+zfs create zroot/ROOT
+zfs create <span class="nt">-o</span> <span class="nv">mountpoint</span><span class="o">=</span>/tmp/mnt/zroot zroot/ROOT/default</code></pre></figure>
+
+<p>because the eli devices have a sector size of 4096, zpool create automatically uses ashift=12</p>
+
+<p>check it with <code class="highlighter-rouge">zdb</code></p>
+
+<p>Remount boot pool:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">umount /boot/zfs
+umount /tmp/mnt/bootpool
+
+mkdir /tmp/mnt/zroot/bootpool
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/tmp/mnt/zroot/bootpool bootpool
+zfs mount bootpool
+
+mount_nullfs /tmp/mnt/zroot/bootpool/boot/zfs /boot/zfs</code></pre></figure>
+
+<p>Mounts should look like:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">root@:~ <span class="c"># mount</span>
+/dev/iso9660/FREEBSD_INSTALL on / <span class="o">(</span>cd9660, <span class="nb">local</span>, read-only<span class="o">)</span>
+devfs on /dev <span class="o">(</span>devfs, <span class="nb">local</span>, multilabel<span class="o">)</span>
+/dev/md0 on /var <span class="o">(</span>ufs, <span class="nb">local</span><span class="o">)</span>
+/dev/md1 on /tmp <span class="o">(</span>ufs, <span class="nb">local</span><span class="o">)</span>
+&lt;above&gt;:/tmp/etc on /etc <span class="o">(</span>unionfs, <span class="nb">local</span><span class="o">)</span>
+zroot/ROOT/default on /tmp/mnt/zroot <span class="o">(</span>zfs, <span class="nb">local</span>, nfsv4acls<span class="o">)</span>
+bootpool on /tmp/mnt/zroot/bootpool <span class="o">(</span>zfs, <span class="nb">local</span>, nfsv4acls<span class="o">)</span>
+/tmp/mnt/zroot/bootpool/boot/zfs on /boot/zfs <span class="o">(</span>nullfs, <span class="nb">local</span><span class="o">)</span></code></pre></figure>
+
+<h1 id="zfs-zroot-filesystems">ZFS zroot filesystems</h1>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">zfs create <span class="nt">-o</span> <span class="nv">mountpoint</span><span class="o">=</span>/tmp/mnt/zroot/tmp <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nb">exec</span><span class="o">=</span>on <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/tmp
+chmod 1777 /tmp/mnt/zroot/tmp
+
+zfs create <span class="nt">-o</span> <span class="nv">mountpoint</span><span class="o">=</span>/tmp/mnt/zroot/usr <span class="nt">-o</span> <span class="nv">canmount</span><span class="o">=</span>off zroot/usr
+
+zfs create zroot/usr/home
+<span class="nb">cd</span> /tmp/mnt/zroot<span class="p">;</span> ln <span class="nt">-s</span> /usr/home home
+
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/usr/ports
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nb">exec</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/usr/src
+
+zfs create <span class="nt">-o</span> <span class="nv">mountpoint</span><span class="o">=</span>/tmp/mnt/zroot/var zroot/var
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nb">exec</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/var/crash
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nb">exec</span><span class="o">=</span>off <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/var/log
+
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nv">atime</span><span class="o">=</span>on zroot/var/mail
+
+zfs create <span class="nt">-o</span> <span class="nv">compression</span><span class="o">=</span>lz4 <span class="nt">-o</span> <span class="nb">exec</span><span class="o">=</span>on <span class="nt">-o</span> <span class="nv">setuid</span><span class="o">=</span>off zroot/var/tmp
+chmod 1777 /tmp/mnt/zroot/var/tmp</code></pre></figure>
+
+<h1 id="installing-the-base-system">Installing the base system</h1>
+
+<p>Available packages:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">ls</span> /usr/freebsd-dist/
+MANIFEST    base.txz    doc.txz     games.txz   kernel.txz  lib32.txz   ports.txz   src.txz   </code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">cd</span> /tmp/mnt/zroot
+
+unxz <span class="nt">-c</span> /usr/freebsd-dist/base.txz | <span class="nb">tar </span>xpf -
+unxz <span class="nt">-c</span> /usr/freebsd-dist/kernel.txz | <span class="nb">tar </span>xpf -
+unxz <span class="nt">-c</span> /usr/freebsd-dist/src.txz | <span class="nb">tar </span>xpf -
+unxz <span class="nt">-c</span> /usr/freebsd-dist/ports.txz | <span class="nb">tar </span>xpf -</code></pre></figure>
+
+<p>Now let’s chroot into the new system:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">chroot /tmp/mnt/zroot</code></pre></figure>
+
+<p>Setup /boot:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">cd</span> /
+rm <span class="nt">-r</span> boot/zfs
+mv boot/<span class="k">*</span> bootpool/boot/
+rm <span class="nt">-r</span> boot
+ln <span class="nt">-sf</span> bootpool/boot </code></pre></figure>
+
+<p>And an initial /boot/loader.conf that will load ZFS, encryption and settings for encrypted disks on boot:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">echo</span> <span class="s1">'zfs_load="YES"'</span> <span class="o">&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'aesni_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geom_mirror_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geom_eli_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada0p2_keyfile0_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada0p2_keyfile0_type="ada0p2:geli_keyfile0"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada0p2_keyfile0_name="/boot/keys/zroot_encryption.key"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada1p2_keyfile0_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada1p2_keyfile0_type="ada1p2:geli_keyfile0"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'geli_ada1p2_keyfile0_name="/boot/keys/zroot_encryption.key"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'vfs.root.mountfrom="zfs:zroot/ROOT/default"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'zpool_cache_load="YES"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'zpool_cache_type="/boot/zfs/zpool.cache"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf
+<span class="nb">echo</span> <span class="s1">'zpool_cache_name="/boot/zfs/zpool.cache"'</span> <span class="o">&gt;&gt;</span> /boot/loader.conf</code></pre></figure>
+
+<p>Set root password:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">passwd root</code></pre></figure>
+
+<p>Set timezone:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">tzsetup</code></pre></figure>
+
+<p>Setup /etc/rc.conf</p>
+
+<p>Create file and enable ZFS:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">echo</span> <span class="s1">'zfs_enable="YES"'</span> <span class="o">&gt;</span> /etc/rc.conf</code></pre></figure>
+
+<p>Set keymap:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">kbdmap</code></pre></figure>
+
+<p>Select your keymap and then write the output to /etc/rc.conf</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">echo</span> <span class="s1">'keymap="german.iso.kbd"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf</code></pre></figure>
+
+<p>Set hostname:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">set </span><span class="nv">HOSTNAME</span><span class="o">=</span>&lt;name-of-your-host&gt;
+<span class="nb">echo </span><span class="nv">hostname</span><span class="o">=</span><span class="s2">"</span><span class="nv">$HOSTNAME</span><span class="s2">"</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+hostname <span class="nt">-s</span> <span class="s2">"</span><span class="nv">$HOSTNAME</span><span class="s2">"</span></code></pre></figure>
+
+<p>Setup services. This is how I did it; you can change the ‘YES’ to ‘NO’ if you don’t want a service to be running on boot:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">echo</span> <span class="s1">'sshd_enable="YES"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+<span class="nb">echo</span> <span class="s1">'moused_enable="NO"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+<span class="nb">echo</span> <span class="s1">'ntpd_enable="YES"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+<span class="nb">echo</span> <span class="s1">'powerd_enable="YES"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+<span class="nb">echo</span> <span class="s1">'dumpdev="NO"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf</code></pre></figure>
+
+<p>Setup network:</p>
+
+<p>Again I assume that you have DHCP for IPv4 and router advertisements for IPv6.
+Don’t forget to use the correct device name, in my case bge0:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">echo</span> <span class="s1">'ifconfig_bge0="DHCP"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf
+<span class="nb">echo</span> <span class="s1">'ifconfig_bge0_ipv6="inet6 accept_rtadv"'</span> <span class="o">&gt;&gt;</span> /etc/rc.conf</code></pre></figure>
+
+<p>Setup mail:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">cd</span> /etc/mail
+make aliases</code></pre></figure>
+
+<p>Setup /etc/fstab</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">printf</span> <span class="s2">"# Device</span><span class="se">\t\t</span><span class="s2">Mountpoint</span><span class="se">\t</span><span class="s2">FStype</span><span class="se">\t</span><span class="s2">Options</span><span class="se">\t\t</span><span class="s2">Dump</span><span class="se">\t</span><span class="s2">Pass#</span><span class="se">\n</span><span class="s2">"</span> <span class="o">&gt;</span> /etc/fstab
+<span class="nb">printf</span> <span class="s2">"/dev/mirror/swap.eli</span><span class="se">\t\t</span><span class="s2">none</span><span class="se">\t</span><span class="s2">swap</span><span class="se">\t</span><span class="s2">sw</span><span class="se">\t\t</span><span class="s2">0</span><span class="se">\t</span><span class="s2">0</span><span class="se">\n</span><span class="s2">"</span> <span class="o">&gt;&gt;</span> /etc/fstab</code></pre></figure>
+
+<p>Exit chroot:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">exit</span></code></pre></figure>
+
+<p>Unmount filesystems:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">cd</span> /
+umount /boot/zfs
+zfs unmount <span class="nt">-a</span></code></pre></figure>
+
+<p>Setup ZFS mountpoints</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>legacy zroot/ROOT/default
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/tmp zroot/tmp
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/usr zroot/usr
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/var zroot/var
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/bootpool bootpool</code></pre></figure>
+
+<h1 id="reboot-into-the-new-system">Reboot into the new system</h1>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">reboot</code></pre></figure>
+
+<h1 id="creating-a-backup-boot-usb-stick">Creating a backup boot USB stick</h1>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">gpart destroy <span class="nt">-F</span> da1
+gpart create <span class="nt">-s</span> gpt da1
+
+gpart add <span class="nt">-l</span> gptboot0 <span class="nt">-s</span> 512k <span class="nt">-t</span> freebsd-boot da1
+gpart bootcode <span class="nt">-b</span> /boot/pmbr <span class="nt">-p</span> /boot/gptzfsboot <span class="nt">-i</span> 1 da1
+
+gpart add <span class="nt">-l</span> boot0 <span class="nt">-t</span> freebsd-zfs da1
+
+mkdir /mnt/boot
+cp <span class="nt">-r</span> /bootpool/boot/<span class="k">*</span> /mnt/boot/
+
+zpool <span class="nb">export </span>bootpool
+
+mkdir /mnt/newbootpool
+zpool create <span class="nt">-m</span> /mnt/newbootpool bootpool /dev/da1p2
+
+<span class="nb">cd</span> /mnt/newbootpool
+mv /mnt/boot <span class="nb">.</span>
+
+<span class="nb">cd
+</span>zfs unmount bootpool
+zfs <span class="nb">set </span><span class="nv">mountpoint</span><span class="o">=</span>/bootpool bootpool</code></pre></figure>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

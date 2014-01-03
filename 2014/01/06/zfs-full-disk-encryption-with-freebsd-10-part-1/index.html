@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - ZFS Full Disk Encryption with FreeBSD 10 - Part 1</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">ZFS Full Disk Encryption with FreeBSD 10 - Part 1</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          06 Jan 2014
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          1356 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>From the day I started using my first laptop, I became an <em>only one computer</em> guy.<br />
+All data worth keeping was stored on that laptop (and the ones that followed).</p>
+
+<p>I didn’t like the idea of spreading my data over multiple machines like a home computer, an office computer and of course the laptop.<br />
+Having your data on only one machine makes backups simple, you always have your data with you, and you never loose control over your data as long as you keep your laptop nearby.</p>
+
+<p>Well, I did diverge a bit from that philosophy and started using <a href="http://www.dropbox.com">Dropbox</a> to share files with colleagues and friends.</p>
+
+<p>There is of course one problem with using only a laptop to store your data: you are pretty limited in your storage size.</p>
+
+<p>I currently have a Retina MacBook Pro with a 512GB SSD drive that I use for my private data (gigabytes of photos and music) and professional development work, and I also have multiple virtual machines for testing and developing our software with different operating systems. So I usually keep on that Macbook only data that I cannot easily reproduce, and happily delete everything else.</p>
+
+<h1 id="home-nas">Home NAS</h1>
+
+<p>Anyhow, I need more storage space and decided to get myself a home NAS system. But that means that I will now have another system that I don’t always have with me, one that might get stolen or be accessed by someone else while I’m not around.</p>
+
+<p>So I need a system that securely encrypts all data at rest, which I can trust to contain no backdoors, and for which security vulnerabilities are timely published and fixed.</p>
+
+<p>Because of the recent NSA revelations and news like <a href="https://news.ycombinator.com/item?id=6997159">Backdoor found in Linksys, Netgear Routers</a> and <a href="http://yro.slashdot.org/story/13/10/03/1324222/lavabit-case-unsealed-fbi-demands-companies-secretly-turn-over-crypto-keys">Lavabit Case Unsealed: FBI Demands Companies Secretly Turn Over Crypto Keys</a>, I don’t trust commercial closed source NAS solutions and went the DIY open source route.</p>
+
+<p>I’d normally only run Linux on my servers, but in this case I’m going to opt for FreeBSD for three reasons:</p>
+
+<ul>
+  <li>Being able to use <a href="http://en.wikipedia.org/wiki/ZFS">ZFS</a> as the storage system. While in the Linux world we have Btrfs, it’s not yet considered stable (a coworker of mine experienced data loss first hand). There is also ZFS on Linux, but I’m not sure how stable it is and ZFS on FreeBSD is part of the OS.</li>
+  <li>I like the FreeBSD philosophy of developing the whole base operating system in tandem with the kernel.</li>
+  <li>I have never used FreeBSD before (aside from OS X) and would like to take the opportunity to get more familiar with it.</li>
+</ul>
+
+<h1 id="hardware">Hardware</h1>
+
+<p>After doing some research I found the <a href="http://www8.hp.com/us/en/products/proliant-servers/index.html#!view=grid&amp;page=1">HP ProLiant MicroServer</a> line of servers. They are well-built, really inexpensive little machines.</p>
+
+<p>I opted for the slightly older HP ProLiant MicroServer G7 N54L with 2GB ECC RAM - upgradeable to 16GB. The MicroServer came with a <a href="http://www.seagate.com/staticfiles/support/disc/manuals/desktop/Barracuda%207200.12/100529369b.pdf">Seagate Barracuda 7200.12</a> 250GB drive and three additional drive slots.</p>
+
+<p>While not having any hardware encryption accelerators (which might have their <a href="http://arstechnica.com/security/2013/12/we-cannot-trust-intel-and-vias-chip-based-crypto-freebsd-developers-say/">own problems</a>) it’s a nice and very cheap machine.</p>
+
+<p>I’m getting started with a four-disk setup, which I can later expand to a six-disk setup by installing:</p>
+
+<ul>
+  <li><a href="http://www.amazon.de/gp/product/B00AWN8ILI/ref=oh_details_o00_s01_i01?ie=UTF8&amp;psc=1">a 5.25” Bay Extension Frame</a></li>
+  <li>a PCIe SATA card. <a href="http://www.sybausa.com/productInfo.php?iid=1397">Those</a> <a href="http://www.amazon.co.uk/Transcend-Information-TS-PDC3-Combo-Interface/dp/B0056TYT66">two</a> cards should fit and have the added benefit of two external USB3 ports.</li>
+</ul>
+
+<p>The four-disk setup looks like this:</p>
+
+<ul>
+  <li>MicroServer Bay 1: Operating System - 3.5” 250GB 7200RPM HDD</li>
+  <li>MicroServer Bay 2: Operating System - 2.5” 200GB 7200RPM HDD</li>
+  <li>MicroServer Bay 3: Data - 3.5” 4TB NAS HDD</li>
+  <li>MicroServer Bay 4: Data - 3.5” 4TB NAS HDD</li>
+</ul>
+
+<p>I already had the 2.5” 200GB drive lying around and wanted to reuse it, so I printed a custom 2.5” to 3.5” adapter on our <a href="http://printrbot.com">Printrbot</a>. Don’t bother buying a 2.5” to 3.5” mounting frame as it won’t position the 2.5” disk to fit the connector of the drive bay in the MicroServer.</p>
+
+<p>For the 4TB disks, the Seagate ST4000VN000 and WD Red series both seem like good choices.</p>
+
+<p>In case of running low on storage, I’d move the two smaller OS disks to the 5.25” bay and install an additional PCIe SATA card as well as two more 4TB drives.</p>
+
+<p>While the MicroServer could on its own support six drives by using a <a href="http://n40l.wikia.com/wiki/Bios">hacked BIOS</a>, I prefer not to go that way. I want to be able to use the latest original HP BIOS and not have any unexpected problems due to running unsupported code.</p>
+
+<p>So the six-disk setup would look like this:</p>
+
+<ul>
+  <li>5.25” Bay Extension Slot A: Operating System - 3.5” 250GB 7200RPM HDD</li>
+  <li>5.25” Bay Extension Slot B: Operating System - 2.5” 200GB 7200RPM HDD</li>
+  <li>MicroServer Bay 1: Data - 3.5” 4TB NAS HDD</li>
+  <li>MicroServer Bay 2: Data - 3.5” 4TB NAS HDD</li>
+  <li>MicroServer Bay 3: Data - 3.5” 4TB NAS HDD</li>
+  <li>MicroServer Bay 4: Data - 3.5” 4TB NAS HDD</li>
+</ul>
+
+<p>The first thing I’m probably gonna upgrade later is the RAM. Officially the MicroServer N54L only supports 8GB of ECC RAM, but others seem to have no problems with running 16GB ECC as well.</p>
+
+<p><strong>A short word about ECC RAM: while non-ECC RAM would be cheaper and is also supported, don’t use it if you are running ZFS or <a href="http://forums.freenas.org/threads/ecc-vs-non-ecc-ram-and-zfs.15449/">you might lose your data</a>!</strong></p>
+
+<p>I also bought four different USB sticks from three different brands that will store the bootloader, kernel and keyfiles, but more about that later. The smallest sticks I could get were 8GB, but much smaller ones would have been OK too.</p>
+
+<h1 id="setup">Setup</h1>
+
+<blockquote>
+  <p>It’s All About the Software, Baby!</p>
+</blockquote>
+
+<p>Let’s finally talk about the setup, but first I’d like to note the blog posts that I based this guide on:</p>
+
+<ul>
+  <li><a href="https://www.dan.me.uk/blog/2012/05/06/full-disk-encryption-with-zfs-root-for-freebsd-9-x/">Full Disk Encryption (with ZFS root) for FreeBSD 9.x</a></li>
+  <li><a href="https://forums.freebsd.org/viewtopic.php?&amp;t=2775">HOWTO: GELI+ZFS for whole system inc. root with boot from USB stick</a></li>
+  <li><a href="https://calomel.org/zfs_freebsd_root_install.html">FreeBSD ZFS Root Install Script</a></li>
+  <li><a href="http://daemonforums.org/showthread.php?t=7099">HOWTO: FreeBSD ZFS Madness</a></li>
+  <li><a href="https://wiki.freebsd.org/RootOnZFS/GPTZFSBoot">FreeBSD Wiki</a></li>
+  <li><a href="http://web.mr-happy.com/hackstuff/FreeBSD-ZFS.php">ZFS-Only FreeBSD</a></li>
+  <li><a href="http://daemon-notes.com/articles/system/encryption">Encrypted FreeBSD</a></li>
+</ul>
+
+<p>I’m probably going to mention the HP ProLiant MicroServer a few times, and some small details might be specific to my setup, but in general this guide should work on most machines.</p>
+
+<p>I’m aware that there are solutions like <a href="http://www.freenas.org">FreeNAS</a> or <a href="http://www.nas4free.org">Nas4Free</a>, but I prefer setting things up myself and having the latest FreeBSD version.</p>
+
+<h2 id="the-plan">The Plan</h2>
+
+<p>The plan is to have two zpools:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">zroot</code> for the FreeBSD OS installation on the two smaller disks</li>
+  <li><code class="highlighter-rouge">zdata</code> the pool I will use for storing my data (the whole reason I’m doing this setup)</li>
+</ul>
+
+<p>Both <code class="highlighter-rouge">zroot</code> and <code class="highlighter-rouge">zdata</code> will be encrypted using 256-bit AES-XTS with GELI.<br />
+There will be no unencrypted data anywhere in the server, but we will create an unencrypted USB stick that contains <code class="highlighter-rouge">/boot</code> and the keyfiles that will be part of the passphrase to unlock the encrypted partitions.</p>
+
+<p>The idea is that we create a two-factor-authentication: <em>something you know and something you have</em>.</p>
+
+<p>If you want to boot the server and decrypt the disk contents, you have know your passphrase, as well as have the USB stick.</p>
+
+<p>Without the USB stick or the passphrase, the disks cannot be decrypted. Because of that we will later create multiple backups of the USB stick, so if one gets broken, we have a backup.</p>
+
+<p>Of course you now have the problem of securely storing the USB sticks. But even if an attacker steals the USB stick from you, or you forget to remove it after booting, the server is still protected by the passphrase.</p>
+
+<p>The alternative would be to create a bootable partition on the OS disks and only protect the server with a passphrase. In that case you can just use the standard FreeBSD 10 installer and the automatic ZFS partitioning guide.</p>
+
+<p>So what will the disk layout look like?</p>
+
+<p>I’ll use the two smaller drives in a mirrored configuration for <code class="highlighter-rouge">zroot</code> and the two 4TB drives, also in a mirrored configuration, for <code class="highlighter-rouge">zdata</code>.<br />
+<a href="http://constantin.glez.de/blog/2010/01/home-server-raid-greed-and-why-mirroring-still-best">Here is a very good writeup</a> on why it might be a better idea to use zmirror than zraid.</p>
+
+<p>To find out more about the FreeBSD boot process on ZFS, have a look at:</p>
+
+<blockquote>
+  <p><a href="/2014/01/05/how-freebsd-boots-on-zfs/">How FreeBSD Boots on ZFS</a></p>
+</blockquote>
+
+<h1 id="part-2">Part 2</h1>
+
+<p>You will be able to find the actual install process in <a href="/2014/01/07/zfs-full-disk-encryption-with-freebsd-10-part-2/">part two of this blog post</a>.</p>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

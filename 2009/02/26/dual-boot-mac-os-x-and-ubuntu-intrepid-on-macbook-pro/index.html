@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - Dual-Boot Mac OS X and Ubuntu Intrepid on Macbook Pro</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">Dual-Boot Mac OS X and Ubuntu Intrepid on Macbook Pro</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          26 Feb 2009
+        </span>
+        by
+        <span itemprop="author">
+          Philipp Schmid
+        </span>
+        -
+        <span>
+          440 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>Today I tried to install Ubuntu Intrepid 8.10 Desktop Edition 64bit on my Macbook Pro 4.1 next to Mac OS X 10.5.6 Leopard and had to overcome some obstacles which I want to document here.</p>
+
+<p>First, I tried to use the Bootcamp Assistant to resize my existing Mac OS X partition, but I got an error about some files that couldn’t be moved. To solve this, I first tried to free up more space and delete big files, but this didn’t help. The next thing I tried was to run iDefrag, but after five hours it didn’t seem to have made much progress, so I stopped it and reverted to <a href="http://www.bombich.com/software/index.html">Carbon Copy Cloner</a>. After I completed the following steps, Bootcamp Assistant managed to resize the partition:</p>
+
+<ul>
+  <li>Back up the internal disk to an external USB disk using Carbon Copy Cloner (CCC)</li>
+  <li>Reboot and boot from the external USB disk (hold ‘option’ or ‘alt’ during boot)</li>
+  <li>Open Disk Utility and erase the internal hard disk</li>
+  <li>Restore the external USB disk to the internal disk again (don’t select the ‘erase destination’ checkbox)</li>
+  <li>Reboot and boot from the internal disk (hold ‘option’ or ‘alt’ during boot)</li>
+  <li>Run Bootcamp Assistant and partition the disk</li>
+</ul>
+
+<p>Now that I finally had space available for Ubuntu, I downloaded and installed <a href="http://refit.sourceforge.net/">rEFIt</a>, an EFI boot loader. (You’ll need this to repair the MBR after installing Ubuntu.)</p>
+
+<p>Next, reboot and install Ubuntu as you would usually do - just be careful while partitioning the disk.
+After the Ubuntu installation has completed, reboot and select the <em>partition tool</em> in the rEFIt menu. It will prompt you to repair the MBR, which you should do. This step is necessary so that the normal Apple boot menu, which appears when you hold down ‘option’ during boot, won’t see the Linux partition (which it labels as Windows).</p>
+
+<p>You should now be able to select either ‘rEFIt’ or ‘Windows’ in the Apple boot menu, wherein ‘Windows’ is really your Ubuntu installation.
+You can leave this as is, or remove rEFIt (this is what I did) and use the normal Apple boot menu to switch between Mac OS X and Ubuntu.</p>
+
+<p>To get the most out of my Macbook Pro, I followed the steps listed here: <a title="https://help.ubuntu.com/community/MacBookPro4-1/Intrepid" href="https://help.ubuntu.com/community/MacBookPro4-1/Intrepid">https://help.ubuntu.com/community/MacBookPro4-1/Intrepid</a></p>
+
+<p>One thing that didn’t work after the above was the wireless network. The trick was to add ‘wl’ to /etc/modules and do a reboot to make the wireless network card show up.</p>
+
+<p>Beside those initial hassels, Intrepid seems to work really well on the Macbook Pro. Suspend and 3D acceleration seem to work great and everything is very snappy. I haven’t done a lot of testing yet, though.</p>
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

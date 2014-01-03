@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<!--[if lte IE 8]><html class="no-js lt-ie9" lang="en"><![endif]-->
+<!--[if gte IE 9]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="Description" content="Philipp Schmid is a developer and entrepreneur located in Vienna, Austria. This is his personal space.">
+  <meta name="google-site-verification" content="OwEgvJ1S4h-P6_sfyS6CtaMAHZkX9Pu44kwH_RxKuRg" />
+
+  <title>philipp schmid - IPSec between FreeBSD and Mac OS X in Transport Mode</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="alternate" type="application/rss+xml" title="Philipp Schmid" href="http://www.schmidp.com/feed.xml">
+  <!--[if lt IE 9]><script src="/js/vend/respond.min.js"></script><![endif]-->
+</head>
+
+
+<body>
+<div class="page-container container">
+  <aside class="page-sidebar">
+    <nav class="navbar" role="navigation">
+  <div class="navbar-header">
+    <button type="button" class="navbar-toggle">
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+    <h3 class="blog-title">philipp schmid</h3>
+  </div>
+
+  <div class="navbar-collapse">
+    <ul class="nav navbar-nav">
+      <li><a href="/">index</a></li>
+      <li class="gap-bottom"><a href="/imprint">imprint</a></li>
+
+      <li><a href="https://github.com/schmidp/schmidp.github.io/tree/master/public">files</a></li>
+      <li><a href="http://evil.io" title="evil.io">evil</a></li>
+      <li><a href="http://www.openresearch.com" title="openresearch">or</a></li>
+    </ul>
+
+    <p class="navbar-text">
+      <i>philipp schmid</i><br />
+      <a href="mailto:schmidp@schmidp.com">schmidp@schmidp.com</a><br />
+      <a href="https://github.com/schmidp">github.com/schmidp</a><br />
+      <a href="https://twitter.com/schmidp">twitter.com/schmidp</a><br />
+    </p>
+  </div>
+</nav>
+
+  </aside>
+
+  <article class="page-content">
+    <div class="post" itemscope itemtype="http://schema.org/BlogPosting">
+      <h2>
+        <span itemprop="name headline">IPSec between FreeBSD and Mac OS X in Transport Mode</span>
+      </h2>
+
+      <div class="post-meta">
+        <span class="post-date" itemprop="datePublished">
+          20 Jan 2014
+        </span>
+        by
+        <span itemprop="author">
+          
+        </span>
+        -
+        <span>
+          575 words
+        </span>
+      </div>
+
+      <div class="post-content" itemprop="articleBody">
+        <p>Because I do not trust WPA2 Wifi encryption for sensitive data, I implemented IPSec in transport mode between my NAS and my Mac.</p>
+
+<h1 id="mac-os-x">Mac OS X</h1>
+
+<p>Open the file containing the pre-shared keys:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">sudo </span>vim /etc/racoon/psk.txt</code></pre></figure>
+
+<p>And add the IP adress of the FreeBSD box:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">10.0.1.5      password</code></pre></figure>
+
+<p>Add to /etc/racoon/racoon.conf</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">remote 10.0.1.5 <span class="o">[</span>500]
+<span class="o">{</span>
+  exchange_mode main<span class="p">;</span>
+  doi ipsec_doi<span class="p">;</span>
+  situation identity_only<span class="p">;</span>
+
+  my_identifier   address 10.0.1.6<span class="p">;</span>
+  peers_identifier        address 10.0.1.5<span class="p">;</span>
+
+  lifetime        <span class="nb">time </span>8 hour<span class="p">;</span>
+  passive         off<span class="p">;</span>
+  proposal_check  obey<span class="p">;</span>
+  generate_policy off<span class="p">;</span>
+
+  proposal <span class="o">{</span>
+    encryption_algorithm    aes 256<span class="p">;</span>
+    hash_algorithm          sha512<span class="p">;</span>
+    authentication_method   pre_shared_key<span class="p">;</span>
+    lifetime <span class="nb">time           </span>30 sec<span class="p">;</span>
+    dh_group                16<span class="p">;</span>
+  <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="c"># Mac &lt;-&gt; NAS transport</span>
+sainfo address 10.0.1.6 any address 10.0.1.5 any <span class="o">{</span>
+  pfs_group 16<span class="p">;</span>
+  encryption_algorithm aes 256<span class="p">;</span>
+  authentication_algorithm hmac_sha512<span class="p">;</span>
+  compression_algorithm deflate<span class="p">;</span>
+<span class="o">}</span></code></pre></figure>
+
+<p>/etc/racoon/setkey.conf:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c">#!/usr/sbin/setkey -f</span>
+
+<span class="c">## Flush the SAD and SPD</span>
+<span class="c">#</span>
+flush<span class="p">;</span>
+spdflush<span class="p">;</span>
+
+
+<span class="c"># Mac &lt;-&gt; NAS transport</span>
+spdadd 10.0.1.6 10.0.1.5 any <span class="nt">-P</span> out ipsec esp/transport//require ah/transport//require<span class="p">;</span>
+spdadd 10.0.1.5 10.0.1.6 any <span class="nt">-P</span> <span class="k">in </span>ipsec esp/transport//require ah/transport//require<span class="p">;</span></code></pre></figure>
+
+<h1 id="freebsd-10">FreeBSD 10</h1>
+
+<p>First you need to compile a kernel that supports IPSec. Check the <a href="https://www.freebsd.org/doc/handbook/ipsec.html">FreeBSD handbook</a> on how to do that.</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">options         IPSEC
+device          crypto
+options         IPSEC_FILTERTUNNEL
+device          enc</code></pre></figure>
+
+<p>Assuming you are running a kernel that supports IPSec:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="nb">cd</span> /usr/ports/security/ipsec-tools
+make install</code></pre></figure>
+
+<p>Pre-shared keys:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">vim /usr/local/etc/racoon/psk.txt</code></pre></figure>
+
+<p>And add the IP address of the FreeBSD box:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">10.0.1.6      password</code></pre></figure>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">chmod 0600 /usr/local/etc/racoon/psk.txt</code></pre></figure>
+
+<p>Setup: /usr/local/etc/racoon/racoon.conf:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># search this file for pre_shared_key with various ID keys.</span>
+path pre_shared_key <span class="s2">"/usr/local/etc/racoon/psk.txt"</span><span class="p">;</span>
+
+<span class="c"># racoon will look for certificate file in the directory,</span>
+<span class="c"># if the certificate/certificate request payload is received.</span>
+path certificate <span class="s2">"/etc/cert"</span> <span class="p">;</span>
+
+<span class="c"># "padding" defines some parameter of padding.  You should not touch these.</span>
+padding
+<span class="o">{</span>
+  maximum_length 20<span class="p">;</span>      <span class="c"># maximum padding length.</span>
+  randomize off<span class="p">;</span>          <span class="c"># enable randomize length.</span>
+  strict_check off<span class="p">;</span>       <span class="c"># enable strict check.</span>
+  exclusive_tail off<span class="p">;</span>     <span class="c"># extract last one octet.</span>
+<span class="o">}</span>
+
+<span class="c"># If no listen directive is specified, racoon will listen to all</span>
+<span class="c"># available interface addresses.</span>
+listen
+<span class="o">{</span>
+  isakmp          10.0.1.5 <span class="o">[</span>500]<span class="p">;</span>
+<span class="o">}</span>
+
+<span class="c"># Specification of default various timer.</span>
+timer
+<span class="o">{</span>
+  <span class="c"># These value can be changed per remote node.</span>
+  counter 10<span class="p">;</span>             <span class="c"># maximum trying count to send.</span>
+  interval 3 sec<span class="p">;</span> <span class="c"># interval to resend (retransmit)</span>
+  persend 1<span class="p">;</span>              <span class="c"># the number of packets per a send.</span>
+
+  <span class="c"># timer for waiting to complete each phase.</span>
+  phase1 30 sec<span class="p">;</span>
+  phase2 30 sec<span class="p">;</span>
+<span class="o">}</span>
+
+remote 10.0.1.6 <span class="o">[</span>500]
+<span class="o">{</span>
+  exchange_mode   main<span class="p">;</span>
+  doi             ipsec_doi<span class="p">;</span>
+  situation       identity_only<span class="p">;</span>
+  my_identifier   address 10.0.1.5<span class="p">;</span>
+  peers_identifier        address 10.0.1.6<span class="p">;</span>
+  lifetime        <span class="nb">time </span>8 hour<span class="p">;</span>
+  passive         off<span class="p">;</span>
+  proposal_check  obey<span class="p">;</span>
+  generate_policy off<span class="p">;</span>
+
+    proposal <span class="o">{</span>
+      encryption_algorithm    aes 256<span class="p">;</span>
+      hash_algorithm          sha512<span class="p">;</span>
+      authentication_method   pre_shared_key<span class="p">;</span>
+      lifetime <span class="nb">time           </span>30 sec<span class="p">;</span>
+      dh_group                16<span class="p">;</span>
+    <span class="o">}</span>
+<span class="o">}</span>
+
+<span class="c"># NAS &lt;-&gt; Mac transport</span>
+sainfo address 10.0.1.5 any address 10.0.1.6 any <span class="o">{</span>
+  pfs_group 16<span class="p">;</span>
+  encryption_algorithm aes 256<span class="p">;</span>
+  authentication_algorithm hmac_sha512<span class="p">;</span>
+  compression_algorithm deflate<span class="p">;</span>
+<span class="o">}</span></code></pre></figure>
+
+<p>Setup: /usr/local/etc/racoon/setkey.conf:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">flush<span class="p">;</span>
+spdflush<span class="p">;</span>
+
+<span class="c"># NAS &lt;-&gt; Mac transport</span>
+spdadd 10.0.1.5 10.0.1.6 any <span class="nt">-P</span> out ipsec esp/transport//require ah/transport//require<span class="p">;</span>
+spdadd 10.0.1.6 10.0.1.5 any <span class="nt">-P</span> <span class="k">in </span>ipsec esp/transport//require ah/transport//require<span class="p">;</span></code></pre></figure>
+
+<p>Configure pf rules /etc/pf.conf:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># IPSec</span>
+pass <span class="k">in </span>quick proto esp from any to any
+pass <span class="k">in </span>quick proto ah from any to any
+pass <span class="k">in </span>quick proto ipencap from any to any
+pass <span class="k">in </span>quick proto udp from any <span class="nv">port</span><span class="o">=</span>500 to any <span class="nv">port</span><span class="o">=</span>500
+pass out quick proto esp from any to any
+pass out quick proto ah from any to any
+pass out quick proto ipencap from any to any
+pass out quick proto udp from any <span class="nv">port</span><span class="o">=</span>500 to any <span class="nv">port</span><span class="o">=</span>500</code></pre></figure>
+
+<p>Add to /etc/rc.conf</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># IPSec</span>
+<span class="nv">ipsec_enable</span><span class="o">=</span><span class="s2">"YES"</span>
+<span class="nv">ipsec_program</span><span class="o">=</span><span class="s2">"/usr/local/sbin/setkey"</span>
+<span class="nv">ipsec_file</span><span class="o">=</span><span class="s2">"/usr/local/etc/racoon/setkey.conf"</span> <span class="c"># allows setting up spd policies on boot</span>
+<span class="nv">racoon_enable</span><span class="o">=</span><span class="s2">"yes"</span></code></pre></figure>
+
+<p>Run:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh">sysctl net.inet.ipsec.filtertunnel<span class="o">=</span>1
+sysctl net.inet6.ipsec6.filtertunnel<span class="o">=</span>1</code></pre></figure>
+
+<p>Add to /etc/sysctl.conf to persist:</p>
+
+<figure class="highlight"><pre><code class="language-sh" data-lang="sh"><span class="c"># IPSec filtering</span>
+net.inet.ipsec.filtertunnel<span class="o">=</span>1
+net.inet6.ipsec6.filtertunnel<span class="o">=</span>1</code></pre></figure>
+
+
+      </div>
+
+      <p class="post-comments">
+        
+            <div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'schmidp';
+      
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+        
+      </p>
+
+
+    </div>
+  </article>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script>window.jQuery || document.write('<script src="/js/vend/jquery.min.js"><\/script>')</script>
+<script>
+  $(function() {
+    $(".navbar-toggle").click(function(){
+      $(".navbar-collapse").slideToggle().toggleClass('active');
+    });
+  });
+</script>
+
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-60133-1', 'auto');
+  ga('require', 'displayfeatures');
+  ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>
